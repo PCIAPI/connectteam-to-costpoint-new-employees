@@ -1,0 +1,50 @@
+name: Deploy
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v2
+
+      - name: Configure AWS CLI
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws-us-gov:iam::091833772137:role/integrations-lambdas-cicd
+          role-session-name: buildcicd
+          aws-region: us-gov-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr-staging
+        uses: aws-actions/amazon-ecr-login@v1
+
+      # Creating token with using the 'pci-actions' Github App
+      - name: Create Github token
+        id: create_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ vars.PYTHON_LAMBDA_TEMPLATE_APP_ID }}
+          private_key: ${{ secrets.PYTHON_LAMBDA_TEMPLATE_APP_PRIVATE_KEY }}
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build_image_step
+        env:
+          DOCKER_BUILDKIT: 0
+          ECR_REGISTRY: ${{ steps.login-ecr-staging.outputs.registry }}
+          ECR_REPOSITORY: connectteam-to-costpoint-new-employees-lambda
+          IMAGE_TAG: ${{ github.sha }}
+          FUNCTION_NAME: connectteam-to-costpoint-new-employees
+          GH_ACCESS_TOKEN: ${{ steps.create_token.outputs.token }}
+        run: |
+          docker build --file Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest --platform linux/amd64 --build-arg GH_ACCESS_TOKEN=$GH_ACCESS_TOKEN .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "::set-output name=image_tag::$IMAGE_TAG"
+
+          aws lambda update-function-code --function-name $FUNCTION_NAME --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:latest
