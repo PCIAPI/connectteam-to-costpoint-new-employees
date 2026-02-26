@@ -1,0 +1,30 @@
+[project]
+requires-python = ">=3.9"
+
+[tool.isort]
+profile = "black"
+src_paths = ["app"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=app --cov-report=term-missing app/tests --full-trace"
+filterwarnings = [
+    "error",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "UP",
+    "S",
+    "B",
+    "SIM",
+    "I",
+]
+ignore = [
+    "S101",
+]
